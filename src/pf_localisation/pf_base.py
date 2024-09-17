@@ -6,7 +6,7 @@ before PFLocalisationNode will work.
 Converted to Python
 """
 
-import rospy
+import rclpy
 
 from geometry_msgs.msg import (PoseWithCovarianceStamped, PoseArray,
                                Quaternion,  Transform,  TransformStamped )
@@ -107,7 +107,7 @@ class PFLocaliserBase(object):
             self.update_particle_cloud(scan)
             self.particlecloud.header.frame_id = "map"
             self.estimatedpose.pose.pose = self.estimate_pose()
-            currentTime = rospy.Time.now()
+            currentTime = self.get_clock().now()
             
             # ----- Given new estimated pose, now work out the new transform
             self.recalculate_transform(currentTime)
@@ -148,7 +148,7 @@ class PFLocaliserBase(object):
         laser data.
         
         :Args:
-            | currentTime (rospy.Time()): Time stamp for this update
+            | currentTime (self.get_clock().now()): Time stamp for this update
          """
         
         transform = Transform()
@@ -268,7 +268,7 @@ class PFLocaliserBase(object):
         self.estimatedpose.pose = pose.pose
         # ----- Estimated pose has been set, so we should now reinitialise the 
         # ----- particle cloud around it
-        rospy.loginfo("Got pose. Calling initialise_particle_cloud().")
+        self.get_logger().info("Got pose. Calling initialise_particle_cloud().")
         self.particlecloud = self.initialise_particle_cloud(self.estimatedpose)
         self.particlecloud.header.frame_id = "map"
     
@@ -277,6 +277,6 @@ class PFLocaliserBase(object):
         self.occupancy_map = occupancy_map
         self.sensor_model.set_map(occupancy_map)
         # ----- Map has changed, so we should reinitialise the particle cloud
-        rospy.loginfo("Particle filter got map. (Re)initialising.")
+        self.get_logger().info("Particle filter got map. (Re)initialising.")
         self.particlecloud = self.initialise_particle_cloud(self.estimatedpose)
         self.particlecloud.header.frame_id = "map"

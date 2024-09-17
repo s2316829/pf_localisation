@@ -2,7 +2,7 @@
 sensor_model.py
 Provides a SensorModel class to calculate particle weights.
 """
-import rospy
+import rclpy
 from . util import getHeading
 
 import math
@@ -51,7 +51,7 @@ class SensorModel(object):
                                  (float(i) / scan_length)))
                                for i in range(0, scan_length, int(reading_step))]
         
-        rospy.loginfo("Sensor model scan parameters set.")
+        self.get_logger().info("Sensor model scan parameters set.")
         
     def set_map(self, occupancy_map):
         """
@@ -70,7 +70,7 @@ class SensorModel(object):
                              (self.map_width / 2.0) * self.map_resolution )
         self.map_origin_y = ( occupancy_map.info.origin.position.y +
                               (self.map_height / 2.0) * self.map_resolution )
-        rospy.loginfo("Sensor model map set.")
+        self.get_logger().info("Sensor model map set.")
 
     def calc_map_range(self, ox, oy, oa):
         """
@@ -94,7 +94,7 @@ class SensorModel(object):
         if r <= self.scan_range_max:
             return r
         else:
-            # ----- rospy.logwarn("calc_map_range giving oversized ranges!!")
+            # ----- self.get_logger().warning("calc_map_range giving oversized ranges!!")
             return self.scan_range_max
         
     def get_weight(self, scan, pose):

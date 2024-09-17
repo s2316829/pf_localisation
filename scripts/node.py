@@ -6,7 +6,9 @@ subscribes to laser, map, and odometry and creates an instance of
 pf.PFLocaliser() to do the localisation.
 """
 
-import rospy
+import rclpy
+from rclpy.node import Node
+
 import pf_localisation.pf
 from pf_localisation.util import *
 
@@ -21,10 +23,11 @@ from threading import Lock
 import sys
 from copy import deepcopy
 
-class ParticleFilterLocalisationNode(object):
+class ParticleFilterLocalisationNode(Node):
     def __init__(self):
         # ----- Minimum change (m/radians) before publishing new particle cloud and pose
-        self._PUBLISH_DELTA = rospy.get_param("publish_delta", 0.1)  
+        self._PUBLISH_DELTA = self.get_parameter("publish_delta", 0.1)  #self._PUBLISH_DELTA = rospy.get_param("publish_delta", 0.1)
+        # https://roboticsbackend.com/rclpy-params-tutorial-get-set-ros2-params-with-python/
         
         self._particle_filter = pf_localisation.pf.PFLocaliser()
 
@@ -32,31 +35,31 @@ class ParticleFilterLocalisationNode(object):
         self._last_published_pose = None
         self._initial_pose_received = False
 
-        self._pose_publisher = rospy.Publisher("/estimatedpose", PoseStamped)
-        self._amcl_pose_publisher = rospy.Publisher("/amcl_pose",
+        self._pose_publisher = self.create_publisher("/estimatedpose", PoseStamped)
+        self._amcl_pose_publisher = self.create_publisher("/amcl_pose",
                                                     PoseWithCovarianceStamped)
-        self._cloud_publisher = rospy.Publisher("/particlecloud", PoseArray)
-        self._tf_publisher = rospy.Publisher("/tf", tfMessage)
+        self._cloud_publisher = self.create_publisher("/particlecloud", PoseArray)
+        self._tf_publisher = self.create_publisher("/tf", tfMessage)
 
-        rospy.loginfo("Waiting for a map...")
+        self.get_logger().info("Waiting for a map...")
         try:
-            ocuccupancy_map = rospy.wait_for_message("/map", OccupancyGrid, 20)
+            ocuccupancy_map = rclpy.wait_for_message("/map", OccupancyGrid, 20)  # If no wait_for_message, then use a timer with the callback.
         except:
-            rospy.logerr("Problem getting a map. Check that you have a map_server"
+            self.get_logger().error("Problem getting a map. Check that you have a map_server"
                      " running: rosrun map_server map_server <mapname> " )
             sys.exit(1)
-        rospy.loginfo("Map received. %d X %d, %f px/m." %
+        self.get_logger().info("Map received. %d X %d, %f px/m." %
                       (ocuccupancy_map.info.width, ocuccupancy_map.info.height,
                        ocuccupancy_map.info.resolution))
         self._particle_filter.set_map(ocuccupancy_map)
         
-        self._laser_subscriber = rospy.Subscriber("/base_scan", LaserScan,
+        self._laser_subscriber = self.create_subscription("/base_scan", LaserScan,
                                                   self._laser_callback,
                                                   queue_size=1)
-        self._initial_pose_subscriber = rospy.Subscriber("/initialpose",
+        self._initial_pose_subscriber = self.create_subscription("/initialpose",
                                                          PoseWithCovarianceStamped,
                                                          self._initial_pose_callback)
-        self._odometry_subscriber = rospy.Subscriber("/odom", Odometry,
+        self._odometry_subscriber = self.create_subscription("/odom", Odometry,
                                                      self._odometry_callback,
                                                      queue_size=1)
 
@@ -77,9 +80,9 @@ class ParticleFilterLocalisationNode(object):
             t_odom = self._particle_filter.predict_from_odometry(odometry)
             t_filter = self._particle_filter.update_filter(self._latest_scan)
             if t_odom + t_filter > 0.1:
-                rospy.logwarn("Filter cycle overran timeslot")
-                rospy.loginfo("Odometry update: %fs"%t_odom)
-                rospy.loginfo("Particle update: %fs"%t_filter)
+                self.get_logger().warning("Filter cycle overran timeslot")
+                self.get_logger().info("Odometry update: %fs"%t_odom)
+                self.get_logger().info("Particle update: %fs"%t_filter)
     
     def _laser_callback(self, scan):
         """
@@ -127,12 +130,13 @@ class ParticleFilterLocalisationNode(object):
                              getHeading(latest_rot))   # Rotate forward
         q = rotateQuaternion(q, -getHeading(prev_rot)) # Rotate backward
         heading_delta = abs(getHeading(q))
-        #rospy.loginfo("Moved by %f"%location_delta)
+        #self.get_logger().info("Moved by %f"%location_delta)
         return (location_delta > self._PUBLISH_DELTA or
                 heading_delta > self._PUBLISH_DELTA)
 
 if __name__ == '__main__':
     # --- Main Program  ---
-    rospy.init_node("pf_localisation")
+    rclpy.init()
+    rclpy.node_name("pf_localisation")
     node = ParticleFilterLocalisationNode()
-    rospy.spin()
+    rclpy.spin(node)

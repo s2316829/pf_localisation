@@ -65,4 +65,4 @@ All of these can be visualised in RViz by adding the appropriate Views.
 
 * Once you have a basic understanding of what you have to do in the `PFLocaliser` class of `pf.py` file, it is a good idea to look at its parent class `PFLocaliserBase` in `pf_base.py` to see how the other parts of the localisation algorithm is implemented. 
 * You may also go through `sensor_model.py` to see how the sensor model is coded, and how the model update is implemented. The different parameter values that were empirically chosen can also be found here. 
-* Read through `node.py` to understand how the node is impelemented to perform the update whenever new information is available. You can also see how `rospy logging` is used for logging useful information to console. You may also use this for debugging purposes.
+* Read through `node.py` to understand how the node is impelemented to perform the update whenever new information is available. You can also see how `rclpy logging` is used for logging useful information to console. You may also use this for debugging purposes.

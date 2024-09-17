@@ -1,7 +1,7 @@
 from geometry_msgs.msg import Pose, PoseArray, Quaternion
 from . pf_base import PFLocaliserBase
 import math
-import rospy
+import rclpy
 
 from . util import rotateQuaternion, getHeading
 from random import random
