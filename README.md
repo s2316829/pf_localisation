@@ -13,40 +13,19 @@ This package implements the particle filter localisation using sensor and motion
 
 ### Building Package:
 
-* Move package to your catkin workspace (`src` directory)
-* Rebuild catkin workspace 
+* Move package to your colcon workspace (`src` directory)
+* Rebuild colcon workspace 
         
-        catkin_make    # ----- run from root directory of catkin workspace
-
-* Compile laser_trace.cpp (provides laser ray tracing) as follows **if you are not using arm system(windows, unix...)**:
-
-        cd <catkin_ws>/src/pf_localisation/src/laser_trace
-        ./compile.sh #You may have to '''chmod +x compile.sh'''
-
-* replace `./compile.sh` with `./compilearm.sh`  **if you are using arm system(m1 chip mac)**:
-
-If correctly compiled, you should find `laser_trace.so` in the directory `<catkin_ws>/src/pf_localisation/src/pf_localisation`.
-If the ***code does not compile*** you need to install PythonBoost from https://github.com/boostorg/python. This requires the download and compiling of Boost and installation of Faber.
+        colcon build    # ----- run from root directory of your colcon workspace
 
 ### Running the node:
 
-#### On real robot:
-
-        roscore  # ----- not necessary if roslaunch is called before running any nodes with rosrun
-        roslaunch socspioneer p2os_laser.launch
-        roslaunch socspioneer teleop_joy.launch # ----- for teleoperation control (if implementing automatic collision avoidance node, run that instead)
-        rosrun map_server map_server <path_to_your_map_yaml_file>
-        rosrun pf_localisation node.py    # ----- requires laser_trace, and completed pf.py methods.
-
-#### In simulated world:
-
 The localisation node can be tested in stage simulation (without the need for robot).
 
-        roscore
-        rosrun map_server map_server <catkin_ws>/map.yaml
-        rosrun stage_ros stageros <catkin_ws>/src/socspioneer/data/meeting.world
-        roslaunch socspioneer keyboard_teleop.launch  # ---- run only if you want to move robot using keyboard 
-        rosrun pf_localisation node.py    # ----- requires laser_trace, and completed pf.py methods.
+        ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=<colcon_ws>/map.yaml
+        ros2 run stage_ros2 stage_ros2 --ros-args -p world_file:=./src/socspioneer/data/meeting.world
+        ros2 launch socspioneer keyboard_teleop.launch.py  # ---- run only if you want to move robot using keyboard 
+        ros2 run pf_localisation node.py    # ----- requires completed pf.py methods.
 
 **Don't forget to make node.py executable by using ```chmod +x node.py```**
 

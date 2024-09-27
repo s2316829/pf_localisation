@@ -7,12 +7,14 @@ from . util import getHeading
 
 import math
 
-from . import laser_trace
+from pf_localisation import laser_trace
 
 PI_OVER_TWO = math.pi/2 
 
 class SensorModel(object):
-    def __init__(self):
+    def __init__(self, logger):
+        self.logger = logger
+
         # ----- Parameters for particle weight calculation
         self.z_hit = 0.95 		# Default probability if we make a hit
         self.z_short = 0.1 	# Probability of a short reading from 
@@ -29,7 +31,7 @@ class SensorModel(object):
         
     def set_laser_scan_parameters(self,num_readings, scan_range_max,
                                   scan_length, scan_angle_min,
-                                  scan_angle_max ):
+                                  scan_angle_max):
         """
         Set the parameters for laser scanner that this instance is modeling
         
@@ -51,7 +53,7 @@ class SensorModel(object):
                                  (float(i) / scan_length)))
                                for i in range(0, scan_length, int(reading_step))]
         
-        self.get_logger().info("Sensor model scan parameters set.")
+        self.logger.info("Sensor model scan parameters set.")
         
     def set_map(self, occupancy_map):
         """
@@ -70,7 +72,7 @@ class SensorModel(object):
                              (self.map_width / 2.0) * self.map_resolution )
         self.map_origin_y = ( occupancy_map.info.origin.position.y +
                               (self.map_height / 2.0) * self.map_resolution )
-        self.get_logger().info("Sensor model map set.")
+        self.logger.info("Sensor model map set.")
 
     def calc_map_range(self, ox, oy, oa):
         """

@@ -10,15 +10,14 @@ import rclpy
 
 from geometry_msgs.msg import (PoseWithCovarianceStamped, PoseArray,
                                Quaternion,  Transform,  TransformStamped )
-from tf.msg import tfMessage
-from tf import transformations
+from tf2_msgs.msg import TFMessage
+from tf_transformations import quaternion_matrix, quaternion_from_matrix
 from nav_msgs.msg import OccupancyGrid
 
 import math
 import random
 import numpy as np
 from . util import rotateQuaternion, getHeading
-import numpy as np
 from threading import Lock
 import time
 from . import sensor_model
@@ -26,18 +25,20 @@ PI_OVER_TWO = math.pi/2 # For faster calculations
 
 class PFLocaliserBase(object):
 
-    INIT_X = 10 		# Initial x location of robot (metres)
-    INIT_Y = 5			# Initial y location of robot (metres)
-    INIT_Z = 0 			# Initial z location of robot (metres)
-    INIT_HEADING = 0 	# Initial orientation of robot (radians)
+    INIT_X = 10.0 		# Initial x location of robot (metres)
+    INIT_Y = 5.0	    # Initial y location of robot (metres)
+    INIT_Z = 0.0 		# Initial z location of robot (metres)
+    INIT_HEADING = 0.0 	# Initial orientation of robot (radians)
     
-    def __init__(self):
+    def __init__(self, logger, clock):
         # ----- Initialise fields
         self.estimatedpose =  PoseWithCovarianceStamped()
         self.occupancy_map = OccupancyGrid()
         self.particlecloud =  PoseArray()
-        self.tf_message = tfMessage()
+        self.tf_message = TFMessage()
         
+        self._logger = logger
+        self._clock = clock
         self._update_lock =  Lock()
         
         # ----- Parameters
@@ -69,7 +70,7 @@ class PFLocaliserBase(object):
         self.particlecloud.header.frame_id = "map"
         
         # ----- Sensor model
-        self.sensor_model =  sensor_model.SensorModel()
+        self.sensor_model =  sensor_model.SensorModel(logger)
 
     def initialise_particle_cloud(self, initialpose):
         """
@@ -107,7 +108,7 @@ class PFLocaliserBase(object):
             self.update_particle_cloud(scan)
             self.particlecloud.header.frame_id = "map"
             self.estimatedpose.pose.pose = self.estimate_pose()
-            currentTime = self.get_clock().now()
+            currentTime = self._clock.now().to_msg()
             
             # ----- Given new estimated pose, now work out the new transform
             self.recalculate_transform(currentTime)
@@ -153,23 +154,23 @@ class PFLocaliserBase(object):
         
         transform = Transform()
 
-        T_est = transformations.quaternion_matrix([self.estimatedpose.pose.pose.orientation.x,
-                                                   self.estimatedpose.pose.pose.orientation.y,
-                                                   self.estimatedpose.pose.pose.orientation.z,
-                                                   self.estimatedpose.pose.pose.orientation.w])
+        T_est = quaternion_matrix([self.estimatedpose.pose.pose.orientation.x,
+                                   self.estimatedpose.pose.pose.orientation.y,
+                                   self.estimatedpose.pose.pose.orientation.z,
+                                   self.estimatedpose.pose.pose.orientation.w])
         T_est[0, 3] = self.estimatedpose.pose.pose.position.x
         T_est[1, 3] = self.estimatedpose.pose.pose.position.y
         T_est[2, 3] = self.estimatedpose.pose.pose.position.z
         
-        T_odom = transformations.quaternion_matrix([self.last_odom_pose.pose.pose.orientation.x,
-                                                   self.last_odom_pose.pose.pose.orientation.y,
-                                                   self.last_odom_pose.pose.pose.orientation.z,
-                                                   self.last_odom_pose.pose.pose.orientation.w])
+        T_odom = quaternion_matrix([self.last_odom_pose.pose.pose.orientation.x,
+                                    self.last_odom_pose.pose.pose.orientation.y,
+                                    self.last_odom_pose.pose.pose.orientation.z,
+                                    self.last_odom_pose.pose.pose.orientation.w])
         T_odom[0, 3] = self.last_odom_pose.pose.pose.position.x
         T_odom[1, 3] = self.last_odom_pose.pose.pose.position.y
         T_odom[2, 3] = self.last_odom_pose.pose.pose.position.z
         T = np.dot(T_est, np.linalg.inv(T_odom))
-        q = transformations.quaternion_from_matrix(T) #[:3, :3])
+        q = quaternion_from_matrix(T) #[:3, :3])
 
         transform.translation.x = T[0, 3] 
         transform.translation.y = T[1, 3] 
@@ -189,7 +190,7 @@ class PFLocaliserBase(object):
         new_tfstamped.transform = transform
 
         # ----- Add the transform to the list of all transforms
-        self.tf_message = tfMessage(transforms=[new_tfstamped])
+        self.tf_message = TFMessage(transforms=[new_tfstamped])
         
 
     def predict_from_odometry(self, odom):
@@ -268,7 +269,7 @@ class PFLocaliserBase(object):
         self.estimatedpose.pose = pose.pose
         # ----- Estimated pose has been set, so we should now reinitialise the 
         # ----- particle cloud around it
-        self.get_logger().info("Got pose. Calling initialise_particle_cloud().")
+        self._logger.info("Got pose. Calling initialise_particle_cloud().")
         self.particlecloud = self.initialise_particle_cloud(self.estimatedpose)
         self.particlecloud.header.frame_id = "map"
     
@@ -277,6 +278,6 @@ class PFLocaliserBase(object):
         self.occupancy_map = occupancy_map
         self.sensor_model.set_map(occupancy_map)
         # ----- Map has changed, so we should reinitialise the particle cloud
-        self.get_logger().info("Particle filter got map. (Re)initialising.")
+        self._logger.info("Particle filter got map. (Re)initialising.")
         self.particlecloud = self.initialise_particle_cloud(self.estimatedpose)
         self.particlecloud.header.frame_id = "map"

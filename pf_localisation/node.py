@@ -8,13 +8,15 @@ pf.PFLocaliser() to do the localisation.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.wait_for_message import wait_for_message
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 import pf_localisation.pf
 from pf_localisation.util import *
 
 from geometry_msgs.msg import ( PoseStamped, PoseWithCovarianceStamped,
                                 PoseArray, Quaternion )
-from tf.msg import tfMessage
+from tf2_msgs.msg import TFMessage
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid, Odometry
 import pf_localisation
@@ -25,43 +27,49 @@ from copy import deepcopy
 
 class ParticleFilterLocalisationNode(Node):
     def __init__(self):
+        super().__init__("pf_localisation")
         # ----- Minimum change (m/radians) before publishing new particle cloud and pose
-        self._PUBLISH_DELTA = self.get_parameter("publish_delta", 0.1)  #self._PUBLISH_DELTA = rospy.get_param("publish_delta", 0.1)
+        self._PUBLISH_DELTA = self.get_parameter_or("publish_delta", 0.1)
         # https://roboticsbackend.com/rclpy-params-tutorial-get-set-ros2-params-with-python/
         
-        self._particle_filter = pf_localisation.pf.PFLocaliser()
+        self._particle_filter = pf_localisation.pf.PFLocaliser(self.get_logger(), self.get_clock())
 
         self._latest_scan = None
         self._last_published_pose = None
         self._initial_pose_received = False
 
-        self._pose_publisher = self.create_publisher("/estimatedpose", PoseStamped)
-        self._amcl_pose_publisher = self.create_publisher("/amcl_pose",
-                                                    PoseWithCovarianceStamped)
-        self._cloud_publisher = self.create_publisher("/particlecloud", PoseArray)
-        self._tf_publisher = self.create_publisher("/tf", tfMessage)
+        self._pose_publisher = self.create_publisher(PoseStamped, "/estimatedpose", 10)
+        self._amcl_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/amcl_pose", 10)
+        self._cloud_publisher = self.create_publisher(PoseArray, "/particlecloud", 10)
+        self._tf_publisher = self.create_publisher(TFMessage, "/tf", 10)
+
+        latching_qos = QoSProfile(depth=1,
+            durability=QoSDurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL)
 
         self.get_logger().info("Waiting for a map...")
         try:
-            ocuccupancy_map = rclpy.wait_for_message("/map", OccupancyGrid, 20)  # If no wait_for_message, then use a timer with the callback.
-        except:
-            self.get_logger().error("Problem getting a map. Check that you have a map_server"
-                     " running: rosrun map_server map_server <mapname> " )
+            success, ocuccupancy_map = wait_for_message(
+                OccupancyGrid, self, "/map", qos_profile=latching_qos, time_to_wait=20)  # If no wait_for_message, then use a timer with the callback.
+        except Exception as e:
+            self.get_logger().error(e)
+            self.get_logger().error("""Problem getting a map. Check that you have an activated map_server
+run: ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=<path_to_your_map_yaml_file>
+configure: ros2 lifecycle set map_server configure
+activate: ros2 lifecycle set map_server activate
+""")
             sys.exit(1)
         self.get_logger().info("Map received. %d X %d, %f px/m." %
                       (ocuccupancy_map.info.width, ocuccupancy_map.info.height,
                        ocuccupancy_map.info.resolution))
         self._particle_filter.set_map(ocuccupancy_map)
         
-        self._laser_subscriber = self.create_subscription("/base_scan", LaserScan,
-                                                  self._laser_callback,
-                                                  queue_size=1)
-        self._initial_pose_subscriber = self.create_subscription("/initialpose",
-                                                         PoseWithCovarianceStamped,
-                                                         self._initial_pose_callback)
-        self._odometry_subscriber = self.create_subscription("/odom", Odometry,
-                                                     self._odometry_callback,
-                                                     queue_size=1)
+        self._laser_subscriber = self.create_subscription(LaserScan, "/base_scan",
+                                                  self._laser_callback, 1)
+        self._initial_pose_subscriber = self.create_subscription(PoseWithCovarianceStamped, 
+                                                         "/initialpose",
+                                                         self._initial_pose_callback, 1)
+        self._odometry_subscriber = self.create_subscription(Odometry, "/odom", 
+                                                     self._odometry_callback, 1)
 
     def _initial_pose_callback(self, pose):
         """ called when RViz sends a user supplied initial pose estimate """
@@ -134,9 +142,11 @@ class ParticleFilterLocalisationNode(Node):
         return (location_delta > self._PUBLISH_DELTA or
                 heading_delta > self._PUBLISH_DELTA)
 
-if __name__ == '__main__':
+def main(args=None):
     # --- Main Program  ---
-    rclpy.init()
-    rclpy.node_name("pf_localisation")
+    rclpy.init(args=args)
     node = ParticleFilterLocalisationNode()
     rclpy.spin(node)
+
+if __name__ == '__main__':
+    main()
